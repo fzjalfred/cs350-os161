@@ -396,6 +396,23 @@ cmd_kheapstats(int nargs, char **args)
 	return 0;
 }
 
+/*
+ * Command for enable the output of debugging messages of type DB_THREADS.
+ */
+static
+int
+cmd_dth(int nargs, char **args)
+{
+	(void)nargs;
+	(void)args;
+	if (dbflags == 0) {
+		dbflags = DB_THREADS;
+	} else {
+		dbflags |= DB_THREADS;
+	}
+	return 0;
+}
+
 ////////////////////////////////////////
 //
 // Menus.
@@ -437,6 +454,7 @@ static const char *opsmenu[] = {
 	"[sync]    Sync filesystems          ",
 	"[panic]   Intentional panic         ",
 	"[q]       Quit and shut down        ",
+	"[dth]     set debug DB_THREADS open ",
 	NULL
 };
 
@@ -549,6 +567,7 @@ static struct {
 	{ "q",		cmd_quit },
 	{ "exit",	cmd_quit },
 	{ "halt",	cmd_quit },
+	{ "dth",	cmd_dth },
 
 #if OPT_SYNCHPROBS
 	/* in-kernel synchronization problem(s) */
