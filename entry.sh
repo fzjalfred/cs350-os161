@@ -17,7 +17,8 @@ CONTAINER=$(docker ps|grep os161-builder|awk '{print $1}')
 
 if test "$CONTAINER" = ""
 then	
-	if [ $(docker ps -a|grep os161) ]; then 
+	if [ $"(docker ps -a|grep os161)" ]
+       	then 
 		echo "restarting container ..."
 		docker start -i os161
 	else
