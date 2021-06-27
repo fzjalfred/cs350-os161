@@ -1,10 +1,22 @@
-FROM debian:jessie
+FROM ubuntu:16.04
+LABEL maintainer="FengZijian <fzjalfred@gmail.com>"
 
 # First install GCC 4.9, make, and ncurses (required for GDB)
 RUN apt-get update && apt-get install -y make gcc-4.9 libncurses5-dev
 RUN ln -s /usr/bin/gcc-4.9 /usr/bin/gcc
 
-RUN useradd -ms /bin/bash os161
+RUN apt-get update && apt-get install -y \
+    apt-utils vim git sudo tmux &&\
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+RUN adduser os161 --gecos "" --disabled-password && \
+    echo "abcd\nabcd" | passwd os161 && \
+    chsh -s /bin/bash os161 && \
+    adduser os161 sudo && \
+    mkdir os161 && \
+    chown -R os161:os161 os161 && \
+    su os161
+
 ENV HOME=/home/os161
 RUN mkdir -p $HOME
 

@@ -1,4 +1,6 @@
 os161-1.99/**/*.depend
 os161-1.99/**/build
 os161kern.tgz
-root
+os161-1.99/defs.mk
+.vscode/*
+root/*
