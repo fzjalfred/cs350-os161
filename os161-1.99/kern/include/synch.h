@@ -77,6 +77,7 @@ struct lock {
         bool held;
         struct Thread* owner;
         wchan* wc;
+        spinlock spin;
         // add what you need here
         // (don't forget to mark things volatile as needed)
 };
