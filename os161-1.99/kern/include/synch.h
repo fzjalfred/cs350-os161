@@ -36,6 +36,7 @@
 
 
 #include <spinlock.h>
+#include <wchan.h>
 
 /*
  * Dijkstra-style semaphore.
@@ -75,9 +76,9 @@ void V(struct semaphore *);
 struct lock {
         char *lk_name;
         bool held;
-        struct Thread* owner;
-        wchan* wc;
-        spinlock spin;
+        struct thread* owner;
+        struct wchan* lk_wchan;
+        struct spinlock lk_lock;
         // add what you need here
         // (don't forget to mark things volatile as needed)
 };
@@ -117,7 +118,7 @@ void lock_destroy(struct lock *);
 
 struct cv {
         char *cv_name;
-        // add what you need here
+        struct wchan* cv_wchan;
         // (don't forget to mark things volatile as needed)
 };
 
