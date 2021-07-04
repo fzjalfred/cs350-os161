@@ -151,7 +151,6 @@ struct lock *
 lock_create(const char *name)
 {
         struct lock *lock;
-
         lock = kmalloc(sizeof(struct lock));
         if (lock == NULL) {
                 return NULL;

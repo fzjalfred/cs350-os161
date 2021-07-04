@@ -37,6 +37,7 @@
  */
 
 #include <spinlock.h>
+#include <spinlock.h>
 #include <thread.h> /* required for struct threadarray */
 
 struct addrspace;
@@ -50,8 +51,10 @@ struct semaphore;
  */
 struct proc {
 	char *p_name;			/* Name of this process */
+	pid_t p_pid; 
 	struct spinlock p_lock;		/* Lock for this structure */
 	struct threadarray p_threads;	/* Threads in this process */
+	struct array* children;
 
 	/* VM */
 	struct addrspace *p_addrspace;	/* virtual address space */

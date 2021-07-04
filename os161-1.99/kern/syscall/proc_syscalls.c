@@ -9,6 +9,8 @@
 #include <thread.h>
 #include <addrspace.h>
 #include <copyinout.h>
+#include <mips/trapframe.h>
+#include <synch.h>
 
   /* this implementation of sys__exit does not do anything with the exit code */
   /* this needs to be fixed to get exit() and waitpid() working properly */
@@ -92,3 +94,49 @@ sys_waitpid(pid_t pid,
   return(0);
 }
 
+// #if OPT_A2
+int sys_fork(struct trapframe* tf) {
+
+  struct proc* child;
+
+  //create a new process and attach PID
+  child = proc_create_runprogram(curproc->p_name);
+  if (child == NULL) {
+    return ENOMEM;
+    return -1;
+  }
+
+  //attach address space
+  struct addrspace *pointer_p_addrspace = as_create();
+  int copy_fail = as_copy(curproc->p_addrspace, &pointer_p_addrspace);
+  if (copy_fail) {
+    return -1;
+  }
+  child->p_addrspace = pointer_p_addrspace;
+
+  // put trapframe
+  struct trapframe *tf_heap = kmalloc(sizeof(struct trapframe));
+  *tf_heap = *tf;
+
+  // attach thread
+  int thread_fail = thread_fork("start_thread", child, enter_forked_process, tf_heap, 0);
+  if (thread_fail) {
+    return -1;
+  }
+
+  // build parent-child relation
+  curproc->children = array_create();
+  int add_fail = array_add(curproc->children, (void*)&child, NULL);
+  if (add_fail) {
+    return -1;
+  }
+  return child->p_pid;
+}
+
+// #else 
+
+// int sys_fork() {
+//   return 0;
+// }
+
+// #endif /* OPT_A2 */

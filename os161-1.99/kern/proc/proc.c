@@ -69,6 +69,8 @@ static struct semaphore *proc_count_mutex;
 struct semaphore *no_proc_sem;   
 #endif  // UW
 
+pid_t PID_COUNTER = 0;
+struct spinlock PID_COUNTER_MUTEX;
 
 
 /*
@@ -89,6 +91,13 @@ proc_create(const char *name)
 		kfree(proc);
 		return NULL;
 	}
+
+	{
+		spinlock_acquire(&PID_COUNTER_MUTEX);
+    	proc->p_pid = PID_COUNTER++;
+    	spinlock_release(&PID_COUNTER_MUTEX);
+	}
+	
 
 	threadarray_init(&proc->p_threads);
 	spinlock_init(&proc->p_lock);
@@ -193,6 +202,8 @@ proc_destroy(struct proc *proc)
 void
 proc_bootstrap(void)
 {
+	PID_COUNTER = 3;
+    spinlock_init(&PID_COUNTER_MUTEX);
   kproc = proc_create("[kernel]");
   if (kproc == NULL) {
     panic("proc_create for kproc failed\n");
