@@ -15,13 +15,19 @@
   /* this implementation of sys__exit does not do anything with the exit code */
   /* this needs to be fixed to get exit() and waitpid() working properly */
 
+extern struct array* top_pids;
+/*
+-1 for uinitialized exit code
+*/
+extern struct array* top_exit_info;
+
+
 void sys__exit(int exitcode) {
 
   struct addrspace *as;
   struct proc *p = curproc;
   /* for now, just include this to keep the compiler from complaining about
      an unused variable */
-  (void)exitcode;
 
   DEBUG(DB_SYSCALL,"Syscall: _exit(%d)\n",exitcode);
 
@@ -36,6 +42,10 @@ void sys__exit(int exitcode) {
    */
   as = curproc_setas(NULL);
   as_destroy(as);
+
+  lock_acquire(curproc->p_mutex);
+  array_set(top_exit_info, curproc->p_pid, (void*)&exitcode);
+  lock_release(curproc->p_mutex);
 
   /* detach this thread from its process */
   /* note: curproc cannot be used after this call */
@@ -84,8 +94,27 @@ sys_waitpid(pid_t pid,
   if (options != 0) {
     return(EINVAL);
   }
+  #if OPT_A2
+  // check pid
+  if (top_pids[pid]->p_parent_pid != curproc->pid) {
+    return ECHILD;
+  }
+  if (pid >= PID_COUNTER||(top_pid[pid] == NULL && top_exit_info[pid] == -1)) {
+    return ESRCH;
+  }
+
+  lock_acquire(p_mutex);
+  while (top_pids[pid] != NULL) {
+    cv_wait(p_cv, p_mutex);
+  }
+  exitstatus = _MKWAIT_EXIT(top_exit_info[pid]);
+  lock_release(p_mutex);
+
+  #else 
   /* for now, just pretend the exitstatus is 0 */
   exitstatus = 0;
+  #endif /* OPT_A2 */
+
   result = copyout((void *)&exitstatus,status,sizeof(int));
   if (result) {
     return(result);
@@ -118,6 +147,7 @@ int sys_fork(struct trapframe* tf, int32_t *err) {
     return -1;
   }
   child->p_addrspace = pointer_p_addrspace;
+  child->p_parent_pid = curproc->p_pid;
 
   // put trapframe
   struct trapframe *tf_heap = kmalloc(sizeof(struct trapframe));
@@ -130,13 +160,12 @@ int sys_fork(struct trapframe* tf, int32_t *err) {
     return -1;
   }
 
-  // build parent-child relation
-  curproc->children = array_create();
-  int add_fail = array_add(curproc->children, (void*)&child, NULL);
-  if (add_fail) {
-    *err = add_fail;
-    return -1;
-  }
+  // // build parent-child relation
+  // int add_fail1 = array_add(curproc->p_children, (void*)&child->p_pid, NULL);
+  // if (add_fail1) {
+  //   *err = add_fail1;
+  //   return -1;
+  // }
   return child->p_pid;
 }
 

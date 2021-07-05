@@ -1,4 +1,5 @@
 os161-1.99/**/*.depend
+os161-1.99/**/*.o
 os161-1.99/**/build
 os161kern.tgz
 os161-1.99/defs.mk
