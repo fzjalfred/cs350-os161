@@ -95,14 +95,18 @@ sys_waitpid(pid_t pid,
 }
 
 // #if OPT_A2
-int sys_fork(struct trapframe* tf) {
+int sys_fork(struct trapframe* tf, int32_t *err) {
 
   struct proc* child;
 
   //create a new process and attach PID
   child = proc_create_runprogram(curproc->p_name);
   if (child == NULL) {
-    return ENOMEM;
+    *err = ENOMEM;
+    return -1;
+  }
+  if (child->p_pid < 0) {
+    *err = ENPROC; // too many processes on system
     return -1;
   }
 
@@ -110,6 +114,7 @@ int sys_fork(struct trapframe* tf) {
   struct addrspace *pointer_p_addrspace = as_create();
   int copy_fail = as_copy(curproc->p_addrspace, &pointer_p_addrspace);
   if (copy_fail) {
+    *err = copy_fail;
     return -1;
   }
   child->p_addrspace = pointer_p_addrspace;
@@ -121,6 +126,7 @@ int sys_fork(struct trapframe* tf) {
   // attach thread
   int thread_fail = thread_fork("start_thread", child, enter_forked_process, tf_heap, 0);
   if (thread_fail) {
+    *err = thread_fail;
     return -1;
   }
 
@@ -128,6 +134,7 @@ int sys_fork(struct trapframe* tf) {
   curproc->children = array_create();
   int add_fail = array_add(curproc->children, (void*)&child, NULL);
   if (add_fail) {
+    *err = add_fail;
     return -1;
   }
   return child->p_pid;

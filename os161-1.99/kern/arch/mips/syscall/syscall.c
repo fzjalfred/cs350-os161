@@ -81,6 +81,7 @@ syscall(struct trapframe *tf)
 	int callno;
 	int32_t retval;
 	int err;
+	int32_t error_code;
 
 	KASSERT(curthread != NULL);
 	KASSERT(curthread->t_curspl == 0);
@@ -110,9 +111,9 @@ syscall(struct trapframe *tf)
 		break;
 
 		case SYS_fork:
-		retval = sys_fork(tf);
+		retval = sys_fork(tf, &error_code);
 		if (retval == -1) {
-			err = 5;
+			err = error_code;
 		} else {
 			err = 0;
 		}
