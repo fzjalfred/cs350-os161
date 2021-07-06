@@ -118,6 +118,14 @@ syscall(struct trapframe *tf)
 			err = 0;
 		}
 		break;
+		case SYS_execv:
+		retval = sys_execv(&tf->tf_a0, &tf->tf_a1, &error_code);
+		if (retval == -1) {
+			err = error_code;
+		} else {
+			panic("unexpected return from sys_execv");
+		}
+		break;
 #ifdef UW
 	case SYS_write:
 	  err = sys_write((int)tf->tf_a0,

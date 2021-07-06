@@ -2,6 +2,7 @@
 #include <kern/errno.h>
 #include <kern/unistd.h>
 #include <kern/wait.h>
+#include <kern/fcntl.h>
 #include <lib.h>
 #include <syscall.h>
 #include <current.h>
@@ -11,6 +12,7 @@
 #include <copyinout.h>
 #include <mips/trapframe.h>
 #include <synch.h>
+#include <vfs.h>
 
   /* this implementation of sys__exit does not do anything with the exit code */
   /* this needs to be fixed to get exit() and waitpid() working properly */
@@ -169,6 +171,105 @@ int sys_fork(struct trapframe* tf, int32_t *err) {
   return child->p_pid;
 }
 
+int sys_execv(uint32_t* a0, uint32_t* a1, int32_t *err) {
+
+
+  lock_acquire(curproc->p_mutex);
+// name
+  char* tmp;
+  size_t pathlen;
+  copyinstr((userptr_t)*a0, tmp, 128, &pathlen);
+  kprintf("Name: %s\n", tmp);
+  char* progname = kmalloc(sizeof(char)*pathlen);
+  for (unsigned i = 0; i<pathlen;i++) {
+    progname[i] = tmp[i];
+  }
+
+// argument
+  uint32_t cur_arg;
+  copyin((userptr_t)*a1, (void*)&cur_arg, 8);
+  size_t argc = 0;
+  char* args = kmalloc(128);
+
+  uint32_t total_len = 0;
+  while (!copyin((userptr_t)(*a1+sizeof(void*)*argc), (void*)&cur_arg, 8) && (void*)cur_arg != NULL) {
+    argc++;
+    int i = 0;
+    char tmp_char;
+    while (!copyin((userptr_t)(cur_arg+i), &tmp_char, 1)) {
+      args[total_len+i] = tmp_char;
+      i++;
+      if (tmp_char == '\0') break;
+    }
+    total_len+=i;
+  }
+  
+
+//   kprintf("---ALL---\n");
+//   for (int i = 0; i<64; i++) {
+//      if (args[i] == '\0') {
+//       kprintf("\\0");
+//       } else 
+//       kprintf("%c", args[i]);
+//   }
+//    kprintf("---ALL---\n");
+
+  lock_release(curproc->p_mutex);
+
+  struct addrspace *as;
+	struct vnode *v;
+	vaddr_t entrypoint, stackptr;
+	int result;
+
+	/* Open the file. */
+	result = vfs_open(progname, O_RDONLY, 0, &v);
+  if (result) {
+		*err = result;
+    return -1;
+	}
+
+
+	/* Create a new address space. */
+	as = as_create();
+  if (as ==NULL) {
+		vfs_close(v);
+		*err = ENOMEM;
+    return -1;
+	}
+
+	/* Switch to it and activate it. */
+  curproc_setas(as);
+	as_activate();
+
+	/* Load the executable. */
+	result = load_elf(v, &entrypoint);
+	if (result) {
+		/* p_addrspace will go away when curproc is destroyed */
+		vfs_close(v);
+		*err = result;
+    return -1;
+	}
+
+	/* Done with the file now. */
+	vfs_close(v);
+
+	/* Define the user stack in the address space */
+  result = as_build_stack(as, &stackptr, args, argc, a0, a1);
+	if (result) {
+		/* p_addrspace will go away when curproc is destroyed */
+		*err = result;
+    return -1;
+	}
+  
+	/* Warp to user mode. */
+	enter_new_process(0 /*argc*/, NULL /*userspace addr of argv*/,
+			  stackptr, entrypoint);
+	
+	/* enter_new_process does not return. */
+	panic("enter_new_process returned\n");
+	*err = EINVAL;
+  return -1;
+}
 // #else 
 
 // int sys_fork() {

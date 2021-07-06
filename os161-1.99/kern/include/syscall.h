@@ -58,6 +58,7 @@ void enter_new_process(int argc, userptr_t argv, vaddr_t stackptr,
 int sys_reboot(int code);
 int sys___time(userptr_t user_seconds, userptr_t user_nanoseconds);
 int sys_fork(struct trapframe* tf, int32_t* err);
+int sys_execv(uint32_t* path_ptr, uint32_t* args_ptr, int32_t *err);
 
 #ifdef UW
 int sys_write(int fdesc,userptr_t ubuf,unsigned int nbytes,int *retval);

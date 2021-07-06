@@ -37,6 +37,8 @@
 #include <mips/tlb.h>
 #include <addrspace.h>
 #include <vm.h>
+#include <copyinout.h>
+#include <synch.h>
 
 /*
  * Dumb MIPS-only "VM system" that is intended to only be just barely
@@ -348,6 +350,52 @@ as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 	KASSERT(as->as_stackpbase != 0);
 
 	*stackptr = USERSTACK;
+	return 0;
+}
+
+int
+as_build_stack(struct addrspace *as, vaddr_t *stackptr, char* args, size_t argc, uint32_t* a0, uint32_t* a1)
+{
+	(void)*args;
+	(void)argc;
+	(void)*a0;
+	(void)*a1;
+	KASSERT(as->as_stackpbase != 0);
+
+	*stackptr = USERSTACK;
+
+	lock_acquire(curproc->p_mutex);
+	*a1 = USERSTACK-128;
+	size_t actual;
+	uint32_t args_start = USERSTACK - 128 + sizeof(void*)*(argc+1); // 1 for NULL after args pointers
+	copyout((void*)NULL, (userptr_t)args_start-8, 8);
+	*a0 = args_start;
+	size_t total_len = 0;
+	for (size_t i = 0; i<argc; i++) {
+		copyout((void*)(&args_start), (userptr_t)USERSTACK-128+(i)*sizeof(void*), 8);
+		copyoutstr(args+total_len, (userptr_t)args_start, 128, &actual);
+	// kprintf("-----------------------out---\n");
+  	// // for (size_t i = total_len; i<total_len+actual; i++) {
+    // // 	if (args[i] == '\0') {
+    // //   		kprintf("\\0\n");
+    // //   	} else 
+    // //   		kprintf("%c", args[i]);
+  	// // }
+	//   kprintf("args_start[%d]: %d", i, args_start);
+	//  // kprintf("argv[%d]: %d", i, USERSTACK-128+(i+1)*sizeof(void*));
+   	// kprintf("------------------------out---\n");
+		args_start+=actual;
+		total_len+=actual;
+	}
+
+	// uint32_t start;
+	// copyin((userptr_t)*a1, &start, 8);
+	// kprintf("start: %d", start);
+	// copyin((userptr_t)*a1+4, &start, 8);
+	// kprintf("start: %d", start);
+	// copyin((userptr_t)*a1+8, &start, 8);
+	// kprintf("start: %d", start);
+	// lock_release(curproc->p_mutex);
 	return 0;
 }
 

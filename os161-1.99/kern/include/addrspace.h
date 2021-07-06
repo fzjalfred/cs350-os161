@@ -107,6 +107,7 @@ int               as_define_region(struct addrspace *as,
 int               as_prepare_load(struct addrspace *as);
 int               as_complete_load(struct addrspace *as);
 int               as_define_stack(struct addrspace *as, vaddr_t *initstackptr);
+int               as_build_stack(struct addrspace *as, vaddr_t *stackptr, char* args, size_t argc, uint32_t* a0, uint32_t* a1);
 
 
 /*
