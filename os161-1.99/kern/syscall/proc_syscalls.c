@@ -67,9 +67,7 @@ void sys__exit(int exitcode) {
 int
 sys_getpid(pid_t *retval)
 {
-  /* for now, this is just a stub that always returns a PID of 1 */
-  /* you need to fix this to make it work properly */
-  *retval = 1;
+  *retval = curproc->p_pid;
   return(0);
 }
 
@@ -173,17 +171,16 @@ int sys_fork(struct trapframe* tf, int32_t *err) {
 
 int sys_execv(uint32_t* a0, uint32_t* a1, int32_t *err) {
 
-
-  lock_acquire(curproc->p_mutex);
 // name
   char* tmp;
   size_t pathlen;
   copyinstr((userptr_t)*a0, tmp, 128, &pathlen);
-  kprintf("Name: %s\n", tmp);
+  //kprintf("Name: %s\n", tmp);
   char* progname = kmalloc(sizeof(char)*pathlen);
   for (unsigned i = 0; i<pathlen;i++) {
     progname[i] = tmp[i];
   }
+  *a0 = (uint32_t)progname;
 
 // argument
   uint32_t cur_arg;
@@ -192,7 +189,7 @@ int sys_execv(uint32_t* a0, uint32_t* a1, int32_t *err) {
   char* args = kmalloc(128);
 
   uint32_t total_len = 0;
-  while (!copyin((userptr_t)(*a1+sizeof(void*)*argc), (void*)&cur_arg, 8) && (void*)cur_arg != NULL) {
+  while (!copyin((userptr_t)(*a1+sizeof(void*)*argc), (void*)&cur_arg, 4) && (void*)cur_arg != NULL) {
     argc++;
     int i = 0;
     char tmp_char;
@@ -204,17 +201,16 @@ int sys_execv(uint32_t* a0, uint32_t* a1, int32_t *err) {
     total_len+=i;
   }
   
+  *a1 = (uint32_t)args;
+  // kprintf("---ALL---\n");
+  // for (int i = 0; i<64; i++) {
+  //    if (args[i] == '\0') {
+  //     kprintf("\\0");
+  //     } else 
+  //     kprintf("%c", args[i]);
+  // }
+  //  kprintf("---ALL---\n");
 
-//   kprintf("---ALL---\n");
-//   for (int i = 0; i<64; i++) {
-//      if (args[i] == '\0') {
-//       kprintf("\\0");
-//       } else 
-//       kprintf("%c", args[i]);
-//   }
-//    kprintf("---ALL---\n");
-
-  lock_release(curproc->p_mutex);
 
   struct addrspace *as;
 	struct vnode *v;
@@ -238,6 +234,7 @@ int sys_execv(uint32_t* a0, uint32_t* a1, int32_t *err) {
 	}
 
 	/* Switch to it and activate it. */
+  // struct addrspace* old = 
   curproc_setas(as);
 	as_activate();
 
@@ -261,9 +258,12 @@ int sys_execv(uint32_t* a0, uint32_t* a1, int32_t *err) {
     return -1;
 	}
   
+  kfree(progname);
+  kfree(args);
+  //as_destroy(old);
 	/* Warp to user mode. */
-	enter_new_process(0 /*argc*/, NULL /*userspace addr of argv*/,
-			  stackptr, entrypoint);
+	enter_new_process(argc /*argc*/, (userptr_t)stackptr-128/*userspace addr of argv*/,
+			  ROUNDUP(stackptr-128, 8), entrypoint);
 	
 	/* enter_new_process does not return. */
 	panic("enter_new_process returned\n");

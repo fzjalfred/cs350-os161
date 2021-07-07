@@ -345,11 +345,26 @@ as_complete_load(struct addrspace *as)
 }
 
 int
-as_define_stack(struct addrspace *as, vaddr_t *stackptr)
+as_define_stack(struct addrspace *as, vaddr_t *stackptr, char** args, unsigned argc)
 {
 	KASSERT(as->as_stackpbase != 0);
 
-	*stackptr = USERSTACK;
+	*stackptr = USERSTACK - 128;
+
+	uint32_t args_start = USERSTACK - 128 + 4*(argc+1); // 1 for NULL after args pointers
+	uint32_t null_bytes = 0;
+	int fatal = copyout((void*)&null_bytes, (userptr_t)args_start-4, 4);
+	if (fatal) {
+		return fatal;
+	}
+	for (unsigned i = 0; i<argc; i++) {
+		unsigned actual;
+		copyoutstr(args[i], (userptr_t)args_start, 128, &actual);
+		copyout((void*)(&args_start), (userptr_t)(*stackptr+i*4), 4);
+
+		args_start+=actual;
+	}
+
 	return 0;
 }
 
@@ -364,16 +379,23 @@ as_build_stack(struct addrspace *as, vaddr_t *stackptr, char* args, size_t argc,
 
 	*stackptr = USERSTACK;
 
-	lock_acquire(curproc->p_mutex);
-	*a1 = USERSTACK-128;
-	size_t actual;
-	uint32_t args_start = USERSTACK - 128 + sizeof(void*)*(argc+1); // 1 for NULL after args pointers
-	copyout((void*)NULL, (userptr_t)args_start-8, 8);
-	*a0 = args_start;
+	size_t actual = 0;
+	uint32_t args_start = USERSTACK - 128 + 4*(argc+1); // 1 for NULL after args pointers
+	uint32_t null_bytes = 0;
+	int fatal = copyout((void*)&null_bytes, (userptr_t)args_start-4, 4);
+	if (fatal) {
+		return fatal;
+	}
 	size_t total_len = 0;
 	for (size_t i = 0; i<argc; i++) {
-		copyout((void*)(&args_start), (userptr_t)USERSTACK-128+(i)*sizeof(void*), 8);
-		copyoutstr(args+total_len, (userptr_t)args_start, 128, &actual);
+		fatal = copyout((void*)(&args_start), (userptr_t)USERSTACK-128+(i)*4, 4);
+		if (fatal) {
+			return fatal;
+		}
+		fatal = copyoutstr(args+total_len, (userptr_t)args_start, 128, &actual);
+		if (fatal) {
+			return fatal;
+		}
 	// kprintf("-----------------------out---\n");
   	// // for (size_t i = total_len; i<total_len+actual; i++) {
     // // 	if (args[i] == '\0') {
