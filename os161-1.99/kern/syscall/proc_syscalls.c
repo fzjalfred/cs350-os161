@@ -174,17 +174,25 @@ int sys_execv(uint32_t* a0, uint32_t* a1, int32_t *err) {
 // name
   char* tmp;
   size_t pathlen;
-  copyinstr((userptr_t)*a0, tmp, 128, &pathlen);
+  int fatal = copyinstr((userptr_t)*a0, tmp, 128, &pathlen);
+  if (fatal) {
+    *err = fatal;
+		return -1;
+	}
   //kprintf("Name: %s\n", tmp);
   char* progname = kmalloc(sizeof(char)*pathlen);
   for (unsigned i = 0; i<pathlen;i++) {
     progname[i] = tmp[i];
   }
-  *a0 = (uint32_t)progname;
+  //*a0 = (uint32_t)progname;
 
 // argument
   uint32_t cur_arg;
-  copyin((userptr_t)*a1, (void*)&cur_arg, 8);
+  fatal = copyin((userptr_t)*a1, (void*)&cur_arg, 8);
+  if (fatal) {
+    *err = fatal;
+		return -1;
+	}
   size_t argc = 0;
   char* args = kmalloc(128);
 
@@ -201,7 +209,7 @@ int sys_execv(uint32_t* a0, uint32_t* a1, int32_t *err) {
     total_len+=i;
   }
   
-  *a1 = (uint32_t)args;
+  //*a1 = (uint32_t)args;
   // kprintf("---ALL---\n");
   // for (int i = 0; i<64; i++) {
   //    if (args[i] == '\0') {
@@ -234,7 +242,7 @@ int sys_execv(uint32_t* a0, uint32_t* a1, int32_t *err) {
 	}
 
 	/* Switch to it and activate it. */
-  // struct addrspace* old = 
+  struct addrspace* old = 
   curproc_setas(as);
 	as_activate();
 
@@ -251,7 +259,7 @@ int sys_execv(uint32_t* a0, uint32_t* a1, int32_t *err) {
 	vfs_close(v);
 
 	/* Define the user stack in the address space */
-  result = as_build_stack(as, &stackptr, args, argc, a0, a1);
+  result = as_build_stack(as, &stackptr, args, argc);
 	if (result) {
 		/* p_addrspace will go away when curproc is destroyed */
 		*err = result;
@@ -260,7 +268,7 @@ int sys_execv(uint32_t* a0, uint32_t* a1, int32_t *err) {
   
   kfree(progname);
   kfree(args);
-  //as_destroy(old);
+  as_destroy(old);
 	/* Warp to user mode. */
 	enter_new_process(argc /*argc*/, (userptr_t)stackptr-128/*userspace addr of argv*/,
 			  ROUNDUP(stackptr-128, 8), entrypoint);

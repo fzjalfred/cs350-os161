@@ -369,12 +369,10 @@ as_define_stack(struct addrspace *as, vaddr_t *stackptr, char** args, unsigned a
 }
 
 int
-as_build_stack(struct addrspace *as, vaddr_t *stackptr, char* args, size_t argc, uint32_t* a0, uint32_t* a1)
+as_build_stack(struct addrspace *as, vaddr_t *stackptr, char* args, size_t argc)
 {
 	(void)*args;
 	(void)argc;
-	(void)*a0;
-	(void)*a1;
 	KASSERT(as->as_stackpbase != 0);
 
 	*stackptr = USERSTACK;
