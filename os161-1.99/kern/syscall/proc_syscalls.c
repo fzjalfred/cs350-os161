@@ -81,6 +81,7 @@ void sys__exit(int exitcode) {
       array_remove(p->p_children, i);
     }
     array_destroy(p->p_children);
+    p->p_children = NULL;
     proc_destroy(p);
   }
   else {

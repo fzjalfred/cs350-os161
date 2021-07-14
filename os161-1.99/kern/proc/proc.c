@@ -177,17 +177,21 @@ proc_destroy(struct proc *proc)
 		VOP_DECREF(proc->p_cwd);
 		proc->p_cwd = NULL;
 	}
-	// for (int i = (int)array_num(proc->p_children)-1; i>=0; i--) {
-    //   int* child_pid = array_get(proc->p_children, (unsigned)i);
-    //   struct proc* child_ptr = (struct proc*)array_get(top_pids, (unsigned)*child_pid);
-    //   if (child_ptr->p_dead == false) {
-    //     child_ptr->p_parent_pid = -1;
-    //   } else {
-    //     proc_destroy(child_ptr);
-    //   }
-	//   array_remove(proc->p_children, i);
-    // }
-	// array_destroy(proc->p_children);
+	if (proc->p_children != NULL) {
+		for (int i = (int)array_num(proc->p_children)-1; i>=0; i--) {
+      		int* child_pid = array_get(proc->p_children, (unsigned)i);
+      		struct proc* child_ptr = (struct proc*)array_get(top_pids, (unsigned)*child_pid);
+      		if (child_ptr->p_dead == false) {
+        		child_ptr->p_parent_pid = -1;
+      		} else {
+       			 proc_destroy(child_ptr);
+      		}
+	  		array_remove(proc->p_children, i);
+    	}
+		array_destroy(proc->p_children);
+		proc->p_children = NULL;
+	}
+	
 	array_set(top_pids, proc->p_pid, NULL);
 
 #ifndef UW  // in the UW version, space destruction occurs in sys_exit, not here
