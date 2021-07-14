@@ -13,15 +13,20 @@
 #include <mips/trapframe.h>
 #include <synch.h>
 #include <vfs.h>
+#include "opt-A2.h"
 
   /* this implementation of sys__exit does not do anything with the exit code */
   /* this needs to be fixed to get exit() and waitpid() working properly */
 
+#if OPT_A2
 extern struct array* top_pids;
+extern pid_t PID_COUNTER;
+extern struct spinlock PID_COUNTER_MUTEX;
 /*
 -1 for uinitialized exit code
 */
 extern struct array* top_exit_info;
+#endif /* OPT_A2 */
 
 
 void sys__exit(int exitcode) {
@@ -45,9 +50,14 @@ void sys__exit(int exitcode) {
   as = curproc_setas(NULL);
   as_destroy(as);
 
-  lock_acquire(curproc->p_mutex);
-  array_set(top_exit_info, curproc->p_pid, (void*)&exitcode);
-  lock_release(curproc->p_mutex);
+  #if OPT_A2
+  lock_acquire(p->p_mutex);
+  bool to_delete = false;
+  if (p->p_parent_pid == -1 || ((struct proc*)array_get(top_pids, p->p_parent_pid))->p_dead == true) {
+    to_delete = true;
+  } 
+  lock_release(p->p_mutex);
+  #endif /* OPT_A2 */
 
   /* detach this thread from its process */
   /* note: curproc cannot be used after this call */
@@ -55,7 +65,34 @@ void sys__exit(int exitcode) {
 
   /* if this is the last user process in the system, proc_destroy()
      will wake up the kernel menu thread */
-  proc_destroy(p);
+  #if OPT_A2
+  if (p->p_children == NULL && to_delete) {
+    proc_destroy(p);
+  }
+  else if (to_delete) {
+    for (int i = (int)array_num(p->p_children)-1; i>=0; i--) {
+      int* child_pid = array_get(p->p_children, (unsigned)i);
+      struct proc* child_ptr = (struct proc*)array_get(top_pids, (unsigned)*child_pid);
+      if (child_ptr->p_dead == false) {
+        child_ptr->p_parent_pid = -1;
+      } else {
+        proc_destroy(child_ptr);
+      }
+      array_remove(p->p_children, i);
+    }
+    array_destroy(p->p_children);
+    proc_destroy(p);
+  }
+  else {
+    lock_acquire(p->p_mutex);
+    array_set(top_exit_info, p->p_pid, (void*)&exitcode);
+    p->p_dead = true;
+    cv_signal(p->p_cv, p->p_mutex);
+    lock_release(p->p_mutex);
+  }
+  #else
+    proc_destroy(p);
+  #endif /* OPT_A2 */
   
   thread_exit();
   /* thread_exit() does not return, so we should never get here */
@@ -96,19 +133,23 @@ sys_waitpid(pid_t pid,
   }
   #if OPT_A2
   // check pid
-  if (top_pids[pid]->p_parent_pid != curproc->pid) {
-    return ECHILD;
-  }
-  if (pid >= PID_COUNTER||(top_pid[pid] == NULL && top_exit_info[pid] == -1)) {
+  if (pid >= PID_COUNTER || array_get(top_exit_info, pid) == NULL) {
     return ESRCH;
   }
 
-  lock_acquire(p_mutex);
-  while (top_pids[pid] != NULL) {
-    cv_wait(p_cv, p_mutex);
+  if (((struct proc *)array_get(top_pids, pid))->p_parent_pid != curproc->p_pid) {
+    return ECHILD;
   }
-  exitstatus = _MKWAIT_EXIT(top_exit_info[pid]);
-  lock_release(p_mutex);
+  
+
+  struct proc* child = (struct proc *)array_get(top_pids, pid);
+  lock_acquire(child->p_mutex);
+  KASSERT(curproc->p_dead == false);
+  while (child->p_dead == false) {
+    cv_wait(child->p_cv, child->p_mutex);
+  }
+  exitstatus = _MKWAIT_EXIT(*((int*)array_get(top_exit_info, pid)));
+  lock_release(child->p_mutex);
 
   #else 
   /* for now, just pretend the exitstatus is 0 */
@@ -123,7 +164,7 @@ sys_waitpid(pid_t pid,
   return(0);
 }
 
-// #if OPT_A2
+#if OPT_A2
 int sys_fork(struct trapframe* tf, int32_t *err) {
 
   struct proc* child;
@@ -160,15 +201,24 @@ int sys_fork(struct trapframe* tf, int32_t *err) {
     return -1;
   }
 
-  // // build parent-child relation
-  // int add_fail1 = array_add(curproc->p_children, (void*)&child->p_pid, NULL);
-  // if (add_fail1) {
-  //   *err = add_fail1;
-  //   return -1;
-  // }
+  // build parent-child relation
+  if (curproc->p_children == NULL)
+    curproc->p_children = array_create();
+  int add_fail1 = array_add(curproc->p_children, (void*)&child->p_pid, NULL);
+  if (add_fail1) {
+    *err = add_fail1;
+    return -1;
+  }
   return child->p_pid;
 }
 
+#else 
+
+#endif /* OPT_A2 */
+
+
+
+#if OPT_A2
 int sys_execv(uint32_t* a0, uint32_t* a1, int32_t *err) {
 
 // name
@@ -278,10 +328,5 @@ int sys_execv(uint32_t* a0, uint32_t* a1, int32_t *err) {
 	*err = EINVAL;
   return -1;
 }
-// #else 
+#endif /* OPT_A2 */
 
-// int sys_fork() {
-//   return 0;
-// }
-
-// #endif /* OPT_A2 */

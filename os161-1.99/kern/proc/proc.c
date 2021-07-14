@@ -51,6 +51,7 @@
 #include <synch.h>
 #include <kern/fcntl.h>  
 #include <array.h>
+#include "opt-A2.h"
 
 /*
  * The process for the kernel; this holds all the kernel-only threads.
@@ -70,6 +71,7 @@ static struct semaphore *proc_count_mutex;
 struct semaphore *no_proc_sem;   
 #endif  // UW
 
+#if OPT_A2
 pid_t PID_COUNTER = 0;
 struct spinlock PID_COUNTER_MUTEX;
 
@@ -81,7 +83,7 @@ struct array* top_pids;
 -1 for uinitialized exit code
 */
 struct array* top_exit_info;
-
+#endif /* OPT_A2 */
 
 
 /*
@@ -115,21 +117,22 @@ proc_create(const char *name)
 	int add_fail1 = array_add(top_pids, (void*)proc, &ret_index);
 	int add_fail2 = array_add(top_exit_info, (void*)init_exit_info, &ret_index);
 	if (add_fail1) {
+		array_remove(top_pids, proc->p_pid);
     	kfree(proc);
 		return NULL;
   	}
   	if (add_fail2) {
-		array_remove(top_pids, proc->p_pid);
+		array_remove(top_exit_info, proc->p_pid);
     	kfree(proc);
 		return NULL;
   	}
 	KASSERT(ret_index == (unsigned)proc->p_pid);
 
-	//proc->p_children = array_create();
+	proc->p_children = NULL;
 
 	threadarray_init(&proc->p_threads);
 	spinlock_init(&proc->p_lock);
-
+	proc->p_parent_pid = -1;
 	proc->p_dead = false;
 	proc->p_mutex = lock_create("wait_lock");
 	proc->p_cv = cv_create("wait_cv");
@@ -175,8 +178,17 @@ proc_destroy(struct proc *proc)
 		VOP_DECREF(proc->p_cwd);
 		proc->p_cwd = NULL;
 	}
-
-	//kfree(proc->p_children->v);
+	// for (int i = (int)array_num(proc->p_children)-1; i>=0; i--) {
+    //   int* child_pid = array_get(proc->p_children, (unsigned)i);
+    //   struct proc* child_ptr = (struct proc*)array_get(top_pids, (unsigned)*child_pid);
+    //   if (child_ptr->p_dead == false) {
+    //     child_ptr->p_parent_pid = -1;
+    //   } else {
+    //     proc_destroy(child_ptr);
+    //   }
+	//   array_remove(proc->p_children, i);
+    // }
+	// array_destroy(proc->p_children);
 	array_set(top_pids, proc->p_pid, NULL);
 
 #ifndef UW  // in the UW version, space destruction occurs in sys_exit, not here

@@ -35,6 +35,7 @@
 #include <thread.h>
 #include <current.h>
 #include <syscall.h>
+#include "opt-A2.h"
 
 
 /*
@@ -80,8 +81,11 @@ syscall(struct trapframe *tf)
 {
 	int callno;
 	int32_t retval;
-	int err;
+	int err = 1;
+#if OPT_A2
 	int32_t error_code;
+
+#endif /* OPT_A2 */
 
 	KASSERT(curthread != NULL);
 	KASSERT(curthread->t_curspl == 0);
@@ -109,7 +113,7 @@ syscall(struct trapframe *tf)
 		err = sys___time((userptr_t)tf->tf_a0,
 				 (userptr_t)tf->tf_a1);
 		break;
-
+#if OPT_A2
 		case SYS_fork:
 		retval = sys_fork(tf, &error_code);
 		if (retval == -1) {
@@ -126,6 +130,10 @@ syscall(struct trapframe *tf)
 			panic("unexpected return from sys_execv");
 		}
 		break;
+#else 
+
+#endif /* OPT_A2 */
+
 #ifdef UW
 	case SYS_write:
 	  err = sys_write((int)tf->tf_a0,
