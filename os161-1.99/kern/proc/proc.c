@@ -71,7 +71,7 @@ static struct semaphore *proc_count_mutex;
 struct semaphore *no_proc_sem;   
 #endif  // UW
 
-#if OPT_A2
+
 pid_t PID_COUNTER = 0;
 struct spinlock PID_COUNTER_MUTEX;
 
@@ -83,7 +83,6 @@ struct array* top_pids;
 -1 for uinitialized exit code
 */
 struct array* top_exit_info;
-#endif /* OPT_A2 */
 
 
 /*
