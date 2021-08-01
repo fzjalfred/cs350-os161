@@ -8,7 +8,7 @@ fi
 
 cd os161-1.99/kern/conf
 
-./conf ${1}
+./config ${1}
 
 cd ../compile/${1}
 
