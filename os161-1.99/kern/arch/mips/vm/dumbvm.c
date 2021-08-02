@@ -54,11 +54,37 @@
  */
 static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
 
+#if OPT_A3
+
+static paddr_t coremap;
+static paddr_t coremap_start;
+static paddr_t coremap_end;
+static uint64_t coremap_pages;
+static bool core_map_available = false;
+
 void
+vm_bootstrap(void)
+{
+	/* Create coremap and set flag to be true. */
+	ram_getsize(&coremap, &coremap_end);
+	coremap_pages = (coremap_end - coremap)/PAGE_SIZE;
+	uint64_t pg_in_use = (sizeof(int)*coremap_pages/PAGE_SIZE + 1);
+	coremap_start = coremap + PAGE_SIZE*pg_in_use;
+	coremap_pages -= pg_in_use;
+	core_map_available = true;
+}
+#else
 vm_bootstrap(void)
 {
 	/* Do nothing. */
 }
+#endif
+
+#if OPT_A3
+static paddr_t  coremap_stealram(unsigned long npages) {
+	return 0;
+}
+#endif
 
 static
 paddr_t
@@ -67,8 +93,15 @@ getppages(unsigned long npages)
 	paddr_t addr;
 
 	spinlock_acquire(&stealmem_lock);
-
+	#if OPT_A3
+	if (core_map_available) {
+		addr = coremap_stealram(npages);
+	} else {
+		addr = ram_stealmem(npages);
+	}
+	#else
 	addr = ram_stealmem(npages);
+	#endif
 	
 	spinlock_release(&stealmem_lock);
 	return addr;
