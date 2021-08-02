@@ -124,7 +124,11 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	switch (faulttype) {
 	    case VM_FAULT_READONLY:
 		/* We always create pages read-write, so we can't get this */
+		#if OPT_A3
+  		return EROFS;
+  		#else
 		panic("dumbvm: got VM_FAULT_READONLY\n");
+		#endif
 	    case VM_FAULT_READ:
 	    case VM_FAULT_WRITE:
 		break;
@@ -171,8 +175,15 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	stackbase = USERSTACK - DUMBVM_STACKPAGES * PAGE_SIZE;
 	stacktop = USERSTACK;
 
+#if OPT_A3
+	bool is_text = false;
+#endif
+
 	if (faultaddress >= vbase1 && faultaddress < vtop1) {
 		paddr = (faultaddress - vbase1) + as->as_pbase1;
+		#if OPT_A3
+		is_text = true;
+		#endif
 	}
 	else if (faultaddress >= vbase2 && faultaddress < vtop2) {
 		paddr = (faultaddress - vbase2) + as->as_pbase2;
@@ -198,6 +209,11 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		ehi = faultaddress;
 		elo = paddr | TLBLO_DIRTY | TLBLO_VALID;
 		DEBUG(DB_VM, "dumbvm: 0x%x -> 0x%x\n", faultaddress, paddr);
+		#if OPT_A3
+		if (is_text && as->is_loaded) {
+			elo &= ~TLBLO_DIRTY;
+		}
+		#endif
 		tlb_write(ehi, elo, i);
 		splx(spl);
 		return 0;
@@ -207,6 +223,11 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	ehi = faultaddress;
 	elo = paddr | TLBLO_DIRTY | TLBLO_VALID;
 	DEBUG(DB_VM, "dumbvm_random_eviction: 0x%x -> 0x%x\n", faultaddress, paddr);
+	#if OPT_A3
+	if (is_text && as->is_loaded) {
+		elo &= ~TLBLO_DIRTY;
+	}
+	#endif
 	tlb_random(ehi, elo);
 	splx(spl);
 	return 0;
@@ -224,7 +245,9 @@ as_create(void)
 	if (as==NULL) {
 		return NULL;
 	}
-
+	#if OPT_A3
+  	as->is_loaded = false;
+  	#endif
 	as->as_vbase1 = 0;
 	as->as_pbase1 = 0;
 	as->as_npages1 = 0;
@@ -350,7 +373,12 @@ as_prepare_load(struct addrspace *as)
 int
 as_complete_load(struct addrspace *as)
 {
+	#if OPT_A3
+	as_activate();
+	as->is_loaded = true;
+	#else
 	(void)as;
+	#endif
 	return 0;
 }
 
