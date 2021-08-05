@@ -99,19 +99,20 @@ static unsigned long getfreeblocksize(int* start) {
 
 static paddr_t  coremap_stealmem(unsigned long npages) {
 	unsigned i;
-	for (i = 0; i<coremap_pages; i++) {
+	for (i = 0; i<coremap_pages-npages+1; i++) {
 		if (core_array[i] == 0) {
 			unsigned long free_pages = getfreeblocksize(core_array+sizeof(int)*i);
 			if (free_pages >= npages) {
 				for (unsigned j = 1; j<=npages; j++) {
 					core_array[i+j-1] = j;
+					//kprintf("core_array[%d]: %d\n", i+j-1, j);
 				}
-				break;
+				return coremap_start+i*PAGE_SIZE;
 			}
-			i+=free_pages;
+			i+=free_pages-1;
 		}
 	}
-	return KVADDR_TO_PADDR(coremap_start+PAGE_SIZE*i);
+	return 0;
 }
 #endif
 
@@ -145,23 +146,27 @@ alloc_kpages(int npages)
 	if (pa==0) {
 		return 0;
 	}
+	//kprintf("alloc address: %x\n", pa);
 	return PADDR_TO_KVADDR(pa);
 }
 
 void 
 free_kpages(vaddr_t addr)
 {
+	//kprintf("free_kpages address: %p\n", (void*)addr);
 	#if OPT_A3
 	spinlock_acquire(&stealmem_lock);
 	KASSERT(addr != 0);
 	paddr_t paddr = KVADDR_TO_PADDR(addr);
 	bool is_first_block = true;
-	int offset = (paddr - coremap_start)/PAGE_SIZE;
+	unsigned offset = (paddr - coremap_start)/PAGE_SIZE;
 	//core_array = PADDR_TO_KVADDR(coremap);
-	while (is_first_block == true || core_array[offset] > 1) {
+	int i = 0;
+	while (is_first_block == true || (core_array[offset] > 1 && offset<coremap_pages)) {
 		is_first_block = false;
 		core_array[offset] = 0;
 		offset += 1;
+		i++;
 	}
 	spinlock_release(&stealmem_lock);
 	#endif
@@ -336,6 +341,9 @@ as_create(void)
 void
 as_destroy(struct addrspace *as)
 {
+	free_kpages(PADDR_TO_KVADDR(as->as_pbase1));
+	free_kpages(PADDR_TO_KVADDR(as->as_pbase2));
+	free_kpages(PADDR_TO_KVADDR(as->as_stackpbase));
 	kfree(as);
 }
 
