@@ -56,15 +56,16 @@ static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
 
 #if OPT_A3
 
-static paddr_t coremap;
 static paddr_t coremap_start;
 static paddr_t coremap_end;
 static uint64_t coremap_pages;
+static int* core_array;
 static bool core_map_available = false;
 
 void
 vm_bootstrap(void)
 {
+	paddr_t coremap;
 	/* Create coremap and set flag to be true. */
 	ram_getsize(&coremap, &coremap_end);
 	coremap_pages = (coremap_end - coremap)/PAGE_SIZE;
@@ -72,6 +73,12 @@ vm_bootstrap(void)
 	coremap_start = coremap + PAGE_SIZE*pg_in_use;
 	coremap_pages -= pg_in_use;
 	core_map_available = true;
+	
+	// initialize coremap in virtual address.
+	core_array = (int*)PADDR_TO_KVADDR(coremap);
+	for (unsigned i = 0; i < coremap_pages; i++) {
+		core_array[i] = 0;
+	}
 }
 #else
 vm_bootstrap(void)
@@ -81,8 +88,30 @@ vm_bootstrap(void)
 #endif
 
 #if OPT_A3
-static paddr_t  coremap_stealram(unsigned long npages) {
-	return 0;
+static unsigned long getfreeblocksize(int* start) {
+	unsigned long offset = 0;
+	while (start[offset] == 0) {
+		offset++;
+	}
+	return offset;
+}
+
+
+static paddr_t  coremap_stealmem(unsigned long npages) {
+	unsigned i;
+	for (i = 0; i<coremap_pages; i++) {
+		if (core_array[i] == 0) {
+			unsigned long free_pages = getfreeblocksize(core_array+sizeof(int)*i);
+			if (free_pages >= npages) {
+				for (unsigned j = 1; j<=npages; j++) {
+					core_array[i+j-1] = j;
+				}
+				break;
+			}
+			i+=free_pages;
+		}
+	}
+	return KVADDR_TO_PADDR(coremap_start+PAGE_SIZE*i);
 }
 #endif
 
@@ -95,7 +124,7 @@ getppages(unsigned long npages)
 	spinlock_acquire(&stealmem_lock);
 	#if OPT_A3
 	if (core_map_available) {
-		addr = coremap_stealram(npages);
+		addr = coremap_stealmem(npages);
 	} else {
 		addr = ram_stealmem(npages);
 	}
@@ -122,8 +151,20 @@ alloc_kpages(int npages)
 void 
 free_kpages(vaddr_t addr)
 {
-	/* nothing - leak the memory. */
-
+	#if OPT_A3
+	spinlock_acquire(&stealmem_lock);
+	KASSERT(addr != 0);
+	paddr_t paddr = KVADDR_TO_PADDR(addr);
+	bool is_first_block = true;
+	int offset = (paddr - coremap_start)/PAGE_SIZE;
+	//core_array = PADDR_TO_KVADDR(coremap);
+	while (is_first_block == true || core_array[offset] > 1) {
+		is_first_block = false;
+		core_array[offset] = 0;
+		offset += 1;
+	}
+	spinlock_release(&stealmem_lock);
+	#endif
 	(void)addr;
 }
 
