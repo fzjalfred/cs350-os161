@@ -101,7 +101,7 @@ static paddr_t  coremap_stealmem(unsigned long npages) {
 	unsigned i;
 	for (i = 0; i<coremap_pages-npages+1; i++) {
 		if (core_array[i] == 0) {
-			unsigned long free_pages = getfreeblocksize(core_array+sizeof(int)*i);
+			unsigned long free_pages = getfreeblocksize(core_array+i);
 			if (free_pages >= npages) {
 				for (unsigned j = 1; j<=npages; j++) {
 					core_array[i+j-1] = j;
@@ -132,7 +132,6 @@ getppages(unsigned long npages)
 	#else
 	addr = ram_stealmem(npages);
 	#endif
-	
 	spinlock_release(&stealmem_lock);
 	return addr;
 }
